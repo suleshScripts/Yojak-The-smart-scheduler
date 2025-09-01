@@ -10,16 +10,12 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    console.log("Session status:", status, "Session:", session);
-
-    if (status === "loading") return; // Wait until loading is done
-
+    if (status === "loading") return;
+    
     if (!session) {
-      console.log("➡️ No session found, redirecting to /auth/signin");
-      router.replace("/auth/signin"); // use replace() to avoid back button loop
+      router.push("/auth/signin");
     } else {
-      console.log("✅ Session found, redirecting to /dashboard");
-      router.replace("/dashboard");
+      router.push("/dashboard");
     }
   }, [session, status, router]);
 
@@ -27,16 +23,9 @@ export default function Home() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2 text-lg">Checking session...</span>
       </div>
     );
   }
 
-  // Fallback UI while redirecting
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Loader2 className="h-8 w-8 animate-spin" />
-      <span className="ml-2 text-lg">Redirecting...</span>
-    </div>
-  );
+  return null;
 }

@@ -81,6 +81,7 @@ model FacultyProfile {
   timetableEntries    TimetableEntry[]
   attendanceRecords   Attendance[]
   nepCompliance       NEPCompliance[]
+  syllabusProgress    SyllabusProgress[]
   
   @@map("faculty_profiles")
 }
@@ -126,6 +127,7 @@ model Subject {
   department        Department @relation(fields: [departmentId], references: [id])
   faculty           SubjectFaculty[]
   timetableEntries  TimetableEntry[]
+  syllabusProgress  SyllabusProgress[]
   
   @@map("subjects")
 }
@@ -222,6 +224,22 @@ model NEPCompliance {
   
   @@unique([facultyId, week])
   @@map("nep_compliance")
+}
+
+model SyllabusProgress {
+  id          String   @id @default(cuid())
+  facultyId   String
+  subjectId   String
+  coveredPercent Int   @default(0)
+  remarks     String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  faculty     FacultyProfile @relation(fields: [facultyId], references: [id])
+  subject     Subject        @relation(fields: [subjectId], references: [id])
+
+  @@unique([facultyId, subjectId])
+  @@map("syllabus_progress")
 }
 
 // NextAuth.js Prisma Adapter models

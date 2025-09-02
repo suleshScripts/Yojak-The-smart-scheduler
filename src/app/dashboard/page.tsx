@@ -12,10 +12,11 @@ import { Calendar, Clock, Users, AlertTriangle, CheckCircle, BookOpen } from "lu
 import EmergencyRescheduler from "@/components/emergency-rescheduler";
 import FacultyAttendance from "@/components/faculty-attendance";
 import FacultyLeave from "@/components/faculty-leave";
-import NEPComplianceDashboard from "@/components/nep-compliance";
+import SyllabusTracker from "@/components/syllabus-tracker";
 import RealTimeNotifications from "@/components/real-time-notifications";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/auth-guard";
+import HolidaysList from "@/components/holidays-list";
 
 interface DashboardData {
   totalSubjects: number;
@@ -135,6 +136,7 @@ export default function Dashboard() {
 
 function AdminDashboard({ data }: { data: DashboardData }) {
   const router = useRouter();
+  const { session } = useSupabaseAuth();
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGenerateTimetable = async () => {
@@ -215,14 +217,21 @@ function AdminDashboard({ data }: { data: DashboardData }) {
         </Card>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs
+        defaultValue="overview"
+        className="space-y-4"
+        onValueChange={(val) => {
+          if (val === "faculty") router.push('/admin/faculty');
+          if (val === "subjects") router.push('/admin/subjects');
+        }}
+      >
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="faculty">Faculty Management</TabsTrigger>
           <TabsTrigger value="subjects">Subject Management</TabsTrigger>
           <TabsTrigger value="timetable">Timetable</TabsTrigger>
           <TabsTrigger value="holidays">Holidays</TabsTrigger>
-          <TabsTrigger value="nep-compliance">NEP 2020 Compliance</TabsTrigger>
+          <TabsTrigger value="syllabus">Syllabus Covered</TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview" className="space-y-4">
@@ -272,8 +281,12 @@ function AdminDashboard({ data }: { data: DashboardData }) {
           <EmergencyRescheduler />
         </TabsContent>
 
-        <TabsContent value="nep-compliance" className="space-y-4">
-          <NEPComplianceDashboard />
+        <TabsContent value="syllabus" className="space-y-4">
+          <SyllabusTracker />
+        </TabsContent>
+
+        <TabsContent value="holidays" className="space-y-4">
+          <HolidaysList />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,32 +1,33 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useSupabaseAuth } from "@/lib/supabase-auth";
 
 interface Dept { id: string; name: string; code: string }
 
 export default function DepartmentsPage() {
-  const { data: session, status } = useSession();
+  const { session, user, loading } = useSupabaseAuth();
   const router = useRouter();
   const [rows, setRows] = useState<Dept[]>([]);
   const [form, setForm] = useState({ name: "" });
   const [edit, setEdit] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
-    if (status === "loading") return;
-    if (!session || session.user.role !== "ADMIN") {
+    if (loading) return;
+    const role = (user?.user_metadata?.role as string) || "STUDENT";
+    if (!session || role !== "ADMIN") {
       router.push("/auth/signin");
       return;
     }
     load();
-  }, [session, status, router]);
+  }, [session, loading, user, router]);
 
   const load = async () => {
-    const res = await fetch("/api/admin/departments");
+    const res = await fetch("/api/admin/departments", { headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } });
     if (res.ok) setRows((await res.json()).departments);
   };
 
@@ -34,7 +35,7 @@ export default function DepartmentsPage() {
     if (!form.name) return;
     const res = await fetch("/api/admin/departments", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
       body: JSON.stringify(form)
     });
     if (res.ok) {
@@ -47,7 +48,7 @@ export default function DepartmentsPage() {
     if (!edit) return;
     const res = await fetch("/api/admin/departments", {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
       body: JSON.stringify({ id: edit.id, name: edit.name })
     });
     if (res.ok) {
@@ -57,7 +58,7 @@ export default function DepartmentsPage() {
   };
 
   const remove = async (id: string) => {
-    const res = await fetch(`/api/admin/departments?id=${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/admin/departments?id=${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } });
     if (res.ok) await load();
   };
 

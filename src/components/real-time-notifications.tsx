@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { io, Socket } from "socket.io-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Bell, X, AlertTriangle, Calendar, Clock, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
+import { useSupabaseAuth } from "@/lib/supabase-auth";
 
 interface Notification {
   id: string;
@@ -21,74 +21,75 @@ interface Notification {
 }
 
 export default function RealTimeNotifications() {
-  const { data: session } = useSession();
+  const { user, session } = useSupabaseAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
-    if (session) {
-      // Initialize socket connection to current origin by default
-      const origin = typeof window !== 'undefined' ? window.location.origin : undefined;
-      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || origin || 'http://localhost:3001', {
-        path: '/api/socketio'
+    if (!session || !user) return;
+
+    // Initialize socket connection to current origin by default
+    const origin = typeof window !== 'undefined' ? window.location.origin : undefined;
+    const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || origin || 'http://localhost:3001', {
+      path: '/api/socketio'
+    });
+    setSocket(newSocket);
+
+    // Join role-based room using Supabase user metadata role or default
+    const role = (user.user_metadata?.role as string) || 'STUDENT';
+    newSocket.emit('join-role', role);
+
+    // Listen for real-time notifications
+    newSocket.on('emergency-notification', (data) => {
+      addNotification({
+        type: 'EMERGENCY_RESCHEDULE',
+        title: 'Emergency Rescheduling',
+        message: `Emergency rescheduling for ${data.date}: ${data.reason}`,
+        data
       });
-      setSocket(newSocket);
+    });
 
-      // Join role-based room
-      newSocket.emit('join-role', session.user.role);
-
-      // Listen for real-time notifications
-      newSocket.on('emergency-notification', (data) => {
-        addNotification({
-          type: 'EMERGENCY_RESCHEDULE',
-          title: 'Emergency Rescheduling',
-          message: `Emergency rescheduling for ${data.date}: ${data.reason}`,
-          data
-        });
+    newSocket.on('timetable-changed', (data) => {
+      addNotification({
+        type: 'TIMETABLE_CHANGED',
+        title: 'Timetable Updated',
+        message: `Timetable has been ${data.action}: ${data.entry.subject?.name || 'Unknown subject'}`,
+        data
       });
+    });
 
-      newSocket.on('timetable-changed', (data) => {
-        addNotification({
-          type: 'TIMETABLE_CHANGED',
-          title: 'Timetable Updated',
-          message: `Timetable has been ${data.action}: ${data.entry.subject?.name || 'Unknown subject'}`,
-          data
-        });
+    newSocket.on('attendance-changed', (data) => {
+      addNotification({
+        type: 'ATTENDANCE_CHANGED',
+        title: 'Attendance Updated',
+        message: `Faculty ${data.action} recorded`,
+        data
       });
+    });
 
-      newSocket.on('attendance-changed', (data) => {
-        addNotification({
-          type: 'ATTENDANCE_CHANGED',
-          title: 'Attendance Updated',
-          message: `Faculty ${data.action} recorded`,
-          data
-        });
+    newSocket.on('holiday-changed', (data) => {
+      addNotification({
+        type: 'HOLIDAY_CHANGED',
+        title: 'Holiday Updated',
+        message: `Holiday ${data.action}: ${data.holiday.name}`,
+        data
       });
+    });
 
-      newSocket.on('holiday-changed', (data) => {
-        addNotification({
-          type: 'HOLIDAY_CHANGED',
-          title: 'Holiday Updated',
-          message: `Holiday ${data.action}: ${data.holiday.name}`,
-          data
-        });
+    newSocket.on('nep-compliance-changed', (data) => {
+      addNotification({
+        type: 'NEP_COMPLIANCE_CHANGED',
+        title: 'NEP Compliance Updated',
+        message: `Faculty ${data.isCompliant ? 'now compliant' : 'non-compliant'} with NEP 2020`,
+        data
       });
+    });
 
-      newSocket.on('nep-compliance-changed', (data) => {
-        addNotification({
-          type: 'NEP_COMPLIANCE_CHANGED',
-          title: 'NEP Compliance Updated',
-          message: `Faculty ${data.isCompliant ? 'now compliant' : 'non-compliant'} with NEP 2020`,
-          data
-        });
-      });
-
-      return () => {
-        newSocket.close();
-      };
-    }
-  }, [session]);
+    return () => {
+      newSocket.close();
+    };
+  }, [session, user]);
 
   const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     const newNotification: Notification = {

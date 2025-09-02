@@ -1,19 +1,36 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { createClient } from "@supabase/supabase-js";
 
-export async function GET() {
+function getSupabaseServerClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  return createClient(url, anon, { auth: { persistSession: false } });
+}
+
+async function getAuthenticatedPrismaUser(request: Request) {
+  const auth = request.headers.get("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return null;
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) return null;
+  const email = data.user.email;
+  if (!email) return null;
+  const prismaUser = await db.user.findUnique({ where: { email } });
+  return prismaUser;
+}
+
+export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session) {
+    const prismaUser = await getAuthenticatedPrismaUser(request);
+    if (!prismaUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { role } = session.user;
+    const role = prismaUser.role;
 
-    let dashboardData = {
+    let dashboardData: any = {
       totalSubjects: 0,
       totalFaculty: 0,
       totalStudents: 0,
@@ -23,7 +40,6 @@ export async function GET() {
     };
 
     if (role === "ADMIN") {
-      // Admin dashboard data
       const [subjects, faculty, students, pendingUsers] = await Promise.all([
         db.subject.count(),
         db.user.count({ where: { role: "FACULTY" } }),
@@ -39,27 +55,17 @@ export async function GET() {
         pendingApprovals: pendingUsers,
       };
     } else if (role === "FACULTY") {
-      // Faculty dashboard data
       const faculty = await db.facultyProfile.findFirst({
-        where: { userId: session.user.id },
+        where: { userId: prismaUser.id },
         include: {
-          subjects: {
-            include: {
-              subject: true
-            }
-          },
-          timetableEntries: {
-            include: {
-              subject: true,
-              classroom: true
-            }
-          }
-        }
+          subjects: { include: { subject: true } },
+          timetableEntries: { include: { subject: true, classroom: true } },
+        },
       });
 
       if (faculty) {
         const today = new Date();
-        const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        const dayOfWeek = today.getDay();
         const todayClasses = faculty.timetableEntries.filter(entry => entry.dayOfWeek === dayOfWeek);
 
         dashboardData.upcomingClasses = todayClasses.map(entry => ({
@@ -70,9 +76,8 @@ export async function GET() {
         }));
       }
     } else if (role === "STUDENT") {
-      // Student dashboard data
       const student = await db.studentProfile.findFirst({
-        where: { userId: session.user.id },
+        where: { userId: prismaUser.id },
         include: {
           department: {
             include: {
@@ -81,16 +86,12 @@ export async function GET() {
                 include: {
                   subject: true,
                   classroom: true,
-                  faculty: {
-                    include: {
-                      user: true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+                  faculty: { include: { user: true } },
+                },
+              },
+            },
+          },
+        },
       });
 
       if (student && student.department) {

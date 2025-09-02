@@ -1,6 +1,6 @@
 "use client";
 
-import { SessionProvider } from "next-auth/react";
+import { SupabaseAuthProvider } from "@/lib/supabase-auth";
 import { Toaster } from "@/components/ui/toaster";
 
 interface ProvidersProps {
@@ -9,9 +9,9 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   return (
-    <SessionProvider>
+    <SupabaseAuthProvider>
       {children}
       <Toaster />
-    </SessionProvider>
+    </SupabaseAuthProvider>
   );
 }

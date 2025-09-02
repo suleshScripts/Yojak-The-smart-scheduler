@@ -1,25 +1,25 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useSupabaseAuth } from "@/lib/supabase-auth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
 export default function Home() {
-  const { data: session, status } = useSession();
+  const { user, session, loading } = useSupabaseAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "loading") return;
+    if (loading) return;
     
     if (!session) {
       router.push("/auth/signin");
     } else {
       router.push("/dashboard");
     }
-  }, [session, status, router]);
+  }, [session, loading, router]);
 
-  if (status === "loading") {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />

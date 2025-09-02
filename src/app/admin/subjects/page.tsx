@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSupabaseAuth } from "@/lib/supabase-auth";
 
 interface SubjectRow {
   id: string;
@@ -16,25 +16,26 @@ interface SubjectRow {
 }
 
 export default function SubjectsPage() {
-  const { data: session, status } = useSession();
+  const { session, user, loading } = useSupabaseAuth();
   const router = useRouter();
   const [rows, setRows] = useState<SubjectRow[]>([]);
   const [departments, setDepartments] = useState<{id:string;name:string;code:string}[]>([]);
   const [form, setForm] = useState({ name: "", code: "", semester: "", departmentId: "" });
 
   useEffect(() => {
-    if (status === "loading") return;
-    if (!session || session.user.role !== "ADMIN") {
+    if (loading) return;
+    const role = (user?.user_metadata?.role as string) || "STUDENT";
+    if (!session || role !== "ADMIN") {
       router.push("/auth/signin");
       return;
     }
     load();
-  }, [session, status, router]);
+  }, [session, loading, user, router]);
 
   const load = async () => {
     const [sRes, dRes] = await Promise.all([
-      fetch("/api/admin/subjects"),
-      fetch("/api/admin/departments"),
+      fetch("/api/admin/subjects", { headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } }),
+      fetch("/api/admin/departments", { headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } }),
     ]);
     if (sRes.ok) setRows((await sRes.json()).subjects);
     if (dRes.ok) setDepartments((await dRes.json()).departments);
@@ -44,7 +45,7 @@ export default function SubjectsPage() {
     if (!form.name || !form.code || !form.semester || !form.departmentId) return;
     const res = await fetch("/api/admin/subjects", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
       body: JSON.stringify({ ...form, semester: Number(form.semester) }),
     });
     if (res.ok) {
@@ -54,7 +55,7 @@ export default function SubjectsPage() {
   };
 
   const deleteSubject = async (id: string) => {
-    const res = await fetch(`/api/admin/subjects?id=${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/admin/subjects?id=${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } });
     if (res.ok) await load();
   };
 

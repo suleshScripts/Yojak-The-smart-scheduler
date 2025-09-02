@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSupabaseAuth } from "@/lib/supabase-auth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import FacultyLeave from "@/components/faculty-leave";
 import NEPComplianceDashboard from "@/components/nep-compliance";
 import RealTimeNotifications from "@/components/real-time-notifications";
 import { toast } from "sonner";
+import { AuthGuard } from "@/components/auth-guard";
 
 interface DashboardData {
   totalSubjects: number;
@@ -25,8 +26,8 @@ interface DashboardData {
   recentHolidays: any[];
 }
 
-export default function Dashboard() {
-  const { data: session, status } = useSession();
+function DashboardContent() {
+  const { user, session, signOut } = useSupabaseAuth();
   const router = useRouter();
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     totalSubjects: 0,
@@ -38,23 +39,22 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    if (status === "loading") return;
-    
-    if (!session) {
-      router.push("/auth/signin");
-      return;
-    }
+    if (!session) return;
 
     // Load dashboard data based on role
     loadDashboardData();
     const onFocus = () => loadDashboardData();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [session, status, router]);
+  }, [session]);
 
   const loadDashboardData = async () => {
     try {
-      const response = await fetch("/api/dashboard");
+      const response = await fetch("/api/dashboard", {
+        headers: {
+          Authorization: `Bearer ${session?.access_token ?? ""}`,
+        },
+      });
       if (response.ok) {
         const data = await response.json();
         setDashboardData(data);
@@ -65,7 +65,8 @@ export default function Dashboard() {
   };
 
   const getRoleDashboard = () => {
-    const { role, verificationStatus } = session?.user || {};
+    const role = user?.user_metadata?.role || "STUDENT";
+    const verificationStatus = user?.user_metadata?.verificationStatus || "PENDING";
 
     if (verificationStatus === "PENDING") {
       return (
@@ -97,13 +98,10 @@ export default function Dashboard() {
     }
   };
 
-  if (status === "loading") {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
-  }
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/auth/signin");
+  };
 
   return (
     <div className="container mx-auto p-6">
@@ -111,12 +109,12 @@ export default function Dashboard() {
         <div>
           <h1 className="text-3xl font-bold">Smart Classroom Scheduler</h1>
           <p className="text-gray-600 mt-2">
-            Welcome back, {session?.user?.name} ({session?.user?.role})
+            Welcome back, {user?.user_metadata?.full_name || user?.email} ({user?.user_metadata?.role || "STUDENT"})
           </p>
         </div>
         <div className="flex items-center gap-3">
           <RealTimeNotifications />
-          <Button variant="outline" size="sm" onClick={() => signOut({ callbackUrl: "/auth/signin" })}>
+          <Button variant="outline" size="sm" onClick={handleSignOut}>
             Sign out
           </Button>
         </div>
@@ -124,6 +122,14 @@ export default function Dashboard() {
       
       {getRoleDashboard()}
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <AuthGuard>
+      <DashboardContent />
+    </AuthGuard>
   );
 }
 

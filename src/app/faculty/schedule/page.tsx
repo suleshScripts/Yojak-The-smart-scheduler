@@ -1,28 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { useSupabaseAuth } from "@/lib/supabase-auth";
 
 export default function FacultySchedulePage() {
-  const { data: session, status } = useSession();
+  const { session, user, loading } = useSupabaseAuth();
   const router = useRouter();
   const [subjects, setSubjects] = useState<{id:string;name:string}[]>([]);
   const [classrooms, setClassrooms] = useState<{id:string;name:string}[]>([]);
   const [form, setForm] = useState({ subjectId: "", classroomId: "", dayOfWeek: "1", start: "09:00", end: "10:00" });
 
   useEffect(() => {
-    if (status === "loading") return;
-    if (!session || session.user.role !== "FACULTY") {
+    if (loading) return;
+    const role = (user?.user_metadata?.role as string) || "STUDENT";
+    if (!session || role !== "FACULTY") {
       router.push("/auth/signin");
       return;
     }
     load();
-  }, [session, status, router]);
+  }, [session, loading, user, router]);
 
   const load = async () => {
     const [sRes, cRes] = await Promise.all([

@@ -1,13 +1,27 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { createClient } from "@supabase/supabase-js";
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+function getSupabaseServerClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  return createClient(url, anon, { auth: { persistSession: false } });
+}
+
+async function requireAdmin(request: Request) {
+  const auth = request.headers.get("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return false;
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) return false;
+  const role = (data.user.user_metadata as any)?.role;
+  return role === "ADMIN";
+}
+
+export async function GET(request: Request) {
+  const ok = await requireAdmin(request);
+  if (!ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const departments = await db.department.findMany({
     select: { id: true, name: true, code: true }
@@ -16,15 +30,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const ok = await requireAdmin(request);
+  if (!ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { name, code, description } = await request.json();
   if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
-  // Generate a code if not provided
   const base = (code || name)
     .toString()
     .trim()
@@ -32,7 +43,6 @@ export async function POST(request: Request) {
     .replace(/[^A-Z0-9]/g, '')
     .slice(0, 8) || `DEPT${Math.floor(Math.random()*1000)}`;
 
-  // Ensure uniqueness by appending a counter if needed
   let uniqueCode = base;
   let suffix = 1;
   // eslint-disable-next-line no-constant-condition
@@ -48,10 +58,8 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const ok = await requireAdmin(request);
+  if (!ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id, name } = await request.json();
   if (!id || !name) return NextResponse.json({ error: "id and name are required" }, { status: 400 });
   const dept = await db.department.update({ where: { id }, data: { name } });
@@ -59,10 +67,8 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const ok = await requireAdmin(request);
+  if (!ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });

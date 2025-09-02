@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSupabaseAuth } from "@/lib/supabase-auth";
 
 interface PendingUser {
   id: string;
@@ -17,23 +17,28 @@ interface PendingUser {
 }
 
 export default function ApprovalsPage() {
-  const { data: session, status } = useSession();
+  const { session, user, loading } = useSupabaseAuth();
   const router = useRouter();
   const [pending, setPending] = useState<PendingUser[]>([]);
   const [roleMap, setRoleMap] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(false);
 
   useEffect(() => {
-    if (status === "loading") return;
-    if (!session || session.user.role !== "ADMIN") {
+    if (loading) return;
+    const role = (user?.user_metadata?.role as string) || "STUDENT";
+    if (!session || role !== "ADMIN") {
       router.push("/auth/signin");
       return;
     }
     load();
-  }, [session, status, router]);
+  }, [session, loading, user, router]);
 
   const load = async () => {
-    const res = await fetch("/api/admin/approvals");
+    const res = await fetch("/api/admin/approvals", {
+      headers: {
+        Authorization: `Bearer ${session?.access_token ?? ""}`,
+      },
+    });
     if (res.ok) {
       const data = await res.json();
       setPending(data.pending);
@@ -41,18 +46,18 @@ export default function ApprovalsPage() {
   };
 
   const approve = async (userId: string) => {
-    setLoading(true);
+    setLoadingAction(true);
     try {
       const res = await fetch("/api/admin/approvals", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
         body: JSON.stringify({ userId, role: roleMap[userId] || "STUDENT" })
       });
       if (res.ok) {
         await load();
       }
     } finally {
-      setLoading(false);
+      setLoadingAction(false);
     }
   };
 
@@ -87,7 +92,7 @@ export default function ApprovalsPage() {
                         <SelectItem value="ADMIN">ADMIN</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button disabled={loading} onClick={() => approve(u.id)}>Approve</Button>
+                    <Button disabled={loadingAction} onClick={() => approve(u.id)}>Approve</Button>
                   </div>
                 </div>
               ))

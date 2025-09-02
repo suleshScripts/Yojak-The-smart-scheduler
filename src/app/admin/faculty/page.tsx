@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSupabaseAuth } from "@/lib/supabase-auth";
 
 interface FacultyRow {
   id: string;
@@ -15,25 +15,26 @@ interface FacultyRow {
 }
 
 export default function FacultyPage() {
-  const { data: session, status } = useSession();
+  const { session, user, loading } = useSupabaseAuth();
   const router = useRouter();
   const [rows, setRows] = useState<FacultyRow[]>([]);
   const [departments, setDepartments] = useState<{id:string;name:string;code:string}[]>([]);
   const [form, setForm] = useState({ email: "", name: "", departmentId: "" });
 
   useEffect(() => {
-    if (status === "loading") return;
-    if (!session || session.user.role !== "ADMIN") {
+    if (loading) return;
+    const role = (user?.user_metadata?.role as string) || "STUDENT";
+    if (!session || role !== "ADMIN") {
       router.push("/auth/signin");
       return;
     }
     load();
-  }, [session, status, router]);
+  }, [session, loading, user, router]);
 
   const load = async () => {
     const [fRes, dRes] = await Promise.all([
-      fetch("/api/admin/faculty"),
-      fetch("/api/admin/departments"),
+      fetch("/api/admin/faculty", { headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } }),
+      fetch("/api/admin/departments", { headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } }),
     ]);
     if (fRes.ok) setRows((await fRes.json()).faculty);
     if (dRes.ok) setDepartments((await dRes.json()).departments);
@@ -43,7 +44,7 @@ export default function FacultyPage() {
     if (!form.email || !form.departmentId) return;
     const res = await fetch("/api/admin/faculty", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
       body: JSON.stringify(form),
     });
     if (res.ok) {
